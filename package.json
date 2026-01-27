@@ -1,0 +1,11 @@
+{
+    "name": "vectory-setup",
+    "version": "1.0.0",
+    "description": "Setup scripts for Vectory",
+    "scripts": {
+        "setup": "node scripts/setup.js"
+    },
+    "dependencies": {
+        "@mediapipe/tasks-text": "^0.10.0"
+    }
+}
