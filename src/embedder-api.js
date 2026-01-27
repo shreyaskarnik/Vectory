@@ -76,6 +76,9 @@ class Embedder {
     }
 
     static _sendRequest(type, payload) {
+        // Sanitize payload to remove non-clonable objects (like functions)
+        const sanitizedPayload = JSON.parse(JSON.stringify(payload));
+
         return new Promise((resolve, reject) => {
             const id = Math.random().toString(36).substring(7);
             const handler = (event) => {
@@ -86,7 +89,7 @@ class Embedder {
                 }
             };
             window.addEventListener('message', handler);
-            window.postMessage({ type, id, ...payload }, '*');
+            window.postMessage({ type, id, ...sanitizedPayload }, '*');
         });
     }
 }

@@ -59,11 +59,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // console.log('Offscreen received message:', message);
 
     if (message.type === 'VECTORY_AVAILABILITY') {
+        const modality = message.options?.modality || 'text';
+        if (modality !== 'text') {
+            sendResponse('unavailable');
+            return;
+        }
+
         // Check OPFS again if not available, just in case
         if (modelStatus !== 'available') {
             checkModelInOPFS().then(res => {
                 modelStatus = res.status;
-                // If we found it now (e.g. downloaded by SW), initialize?
+                // If we found it now (e.g. downloaded by SW), initialize? 
                 // Actually SW downloads it. We should have a way to know it's ready.
                 // For availability, just return status.
                 sendResponse(modelStatus);
@@ -74,6 +80,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
     }
     else if (message.type === 'VECTORY_CREATE') {
+        const modality = message.options?.modality || 'text';
+        if (modality !== 'text') {
+            sendResponse({ success: false, error: 'Unsupported modality' });
+            return;
+        }
+
         if (modelStatus === 'available' && textEmbedder) {
             sendResponse({ success: true });
         } else {
