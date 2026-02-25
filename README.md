@@ -1,92 +1,127 @@
-# 🚀 Vectory: Speculative Web Embedding API
+# Vectory: Speculative Web Embedding API
 
 **Vectory** is a "[prollyfill](https://kikobeats.com/polyfill-ponyfill-and-prollyfill/#prollyfill)" that injects a tentative, built-in AI style API for embeddings into the browser.
 
-Instead of waiting for a native `window.Embedder` implementation, Vectory uses **Google MediaPipe** to provide on-device embeddings today, mimicking the architectural patterns of [built-in AI APIs](https://developer.chrome.com/docs/ai/built-in-apis) (like the Summarizer and Prompt APIs).
+Instead of waiting for a native `window.Embedder` implementation, Vectory provides on-device embeddings today, mimicking the architectural patterns of [built-in AI APIs](https://developer.chrome.com/docs/ai/built-in-apis) (like the Summarizer and Prompt APIs).
 
-## ✨ Key Features
+## Key Features
 
 * **Native-Style API:** Follows built-in AI's `availability()` and `create()` async patterns.
-* **On-Device Inference:** Powered by Google MediaPipe and the Universal Sentence Encoder (default for now; aiming to switch to EmbeddingGemma).
+* **EmbeddingGemma (default):** Google's state-of-the-art 308M parameter embedding model via [Transformers.js](https://huggingface.co/docs/transformers.js) + WebGPU/WASM.
+* **Universal Sentence Encoder (legacy):** MediaPipe-based fallback via offscreen document.
 * **Private:** Your data never leaves your browser. All embeddings are generated locally.
-* **Efficient Storage:** Models are downloaded and stored once for all, in the **Origin Private File System (OPFS)** for fast, direct-to-disk access.
+* **Efficient Storage:** Models are cached automatically (HuggingFace cache for EmbeddingGemma, OPFS for USE).
 
-## ✨ Known Limitations
+## Known Limitations
 
 * **No Image Embeddings:** Currently only text embeddings are supported.
 
-## 📦 Installation & Setup
+## Installation & Setup
 
-### 1. Download & Setup
-Clone the repository and install the necessary dependencies (this downloads the MediaPipe assets to `src/lib`).
+### 1. Install & Build
 
-```
+```bash
 npm install
+npm run build
+```
+
+This bundles the service worker with Transformers.js and copies extension files to `dist/`.
+
+### 2. (Optional) MediaPipe setup for USE backend
+
+If you want the legacy Universal Sentence Encoder backend:
+
+```bash
 npm run setup
 ```
 
-### 2. Load into Chrome
+### 3. Load into Chrome
+
 1.  Open Chrome and go to `chrome://extensions`.
 2.  Enable **Developer mode** in the top right corner.
 3.  Click **Load unpacked**.
-4.  Select the `src` folder inside the project directory (e.g., `[...]/vectory/src`).
+4.  Select the **`dist`** folder inside the project directory.
 
-That's it! Usage details are below.
+## Model Selection
 
-## 🛠️ Usage for Web Developers
-
-Once the extension is installed, any website / extension can detect and use the `Embedder` API:
+Vectory defaults to **EmbeddingGemma**. To switch backends, open the extension's service worker console and run:
 
 ```javascript
-// 0. Feature Detection: Check if the Vectory Prollyfill is present
+// Switch to Universal Sentence Encoder
+chrome.storage.local.set({ model_backend: 'use' });
+
+// Switch back to EmbeddingGemma (default)
+chrome.storage.local.set({ model_backend: 'embeddinggemma' });
+```
+
+| Backend | Model | Size | Dimensions | Engine |
+|---|---|---|---|---|
+| `embeddinggemma` | EmbeddingGemma-300M (q4) | ~75MB | 768 | Transformers.js (WebGPU/WASM) |
+| `use` | Universal Sentence Encoder | ~6MB | 512 | MediaPipe (WASM) |
+
+## Usage for Web Developers
+
+Once the extension is installed, any website can detect and use the `Embedder` API:
+
+```javascript
 if ('Embedder' in self) {
   try {
-    // 1. Check if this device can run a particular type of embedding
     const status = await Embedder.availability({ modality: 'text' });
 
     if (status === 'available' || status === 'downloadable') {
-      // 2. Create the session (handles download if needed)
-      const embedder = await Embedder.create({ 
+      const embedder = await Embedder.create({
         modality: 'text',
         monitor(m) {
           m.addEventListener('downloadprogress', (e) => {
-            // e.loaded and e.total provide the progress for that 6MB model
             const percent = Math.round((e.loaded / e.total) * 100);
             console.log(`Vectory: Downloading model... ${percent}%`);
           });
         }
       });
 
-      // 3. Generate vectors
-      const input = "Help us explore use cases and refine the API surface for a built-in Embedding capability.";
-      const vector = await embedder.embed(input);
-      
-      console.log(`Vectory: Generated ${vector.length}d vector successfully.`);
-      // console.log(vector); 
-    } else {
-      console.warn("Vectory: Embedding is not supported on this device.", status);
+      const vector = await embedder.embed("Explore use cases for built-in embeddings.");
+      console.log(`Generated ${vector.length}d vector.`);
     }
   } catch (err) {
-    console.error("Vectory: Failed to initialize embedder.", err);
+    console.error("Failed to initialize embedder.", err);
   }
-} else {
-  console.log("Vectory: Embedder API not found. Please ensure the extension is installed and enabled.");
 }
 ```
 
-## 🏗️ Architecture
+## Architecture
 
-1. **Main World Injection:** Injects the `Embedder` class so it's accessible to the page's own JS.
-2. **Service Worker:** Orchestrates model downloads and manages OPFS file handles.
-3. **Offscreen Document:** Runs the MediaPipe WASM runtime in a dedicated environment to keep the Service Worker lean and avoid memory constraints.
+```
+Web Page (window.Embedder)
+    |  postMessage
+Content Script (bridge)
+    |  chrome.runtime.sendMessage
+Background Service Worker
+    |
+    +-- EmbeddingGemma backend (default)
+    |   Transformers.js runs directly in the service worker.
+    |   Model: onnx-community/embeddinggemma-300m-ONNX (q4)
+    |   WebGPU when available, WASM fallback.
+    |
+    +-- USE backend (legacy)
+        Routes to Offscreen Document running MediaPipe WASM.
+        Model: Universal Sentence Encoder (.tflite in OPFS)
+```
 
-## 🚀 Roadmap
+## Testing
+
+```bash
+npm test
+```
+
+Runs Node.js integration tests that load EmbeddingGemma via Transformers.js and verify embedding output (dimensions, cosine similarity, batch consistency).
+
+## Roadmap
 
 * [x] Initial MVP with Universal Sentence Encoder (~6MB).
-* [ ] Support for **EmbeddingGemma**.
-* [ ] Multimodal support (Image Embeddings via MediaPipe)?
+* [x] Support for **EmbeddingGemma** via Transformers.js.
+* [ ] Multimodal support (Image Embeddings)?
 * [ ] Integrated similarity utilities (`Embedder.cosineSimilarity`)?
 
-## 🤝 Contributing
+## Contributing
 
 Vectory is an exploratory project to accelerate product discovery for built-in web AI. We welcome feedback on use cases, the API surface, performance, etc.

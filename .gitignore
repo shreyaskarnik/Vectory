@@ -1,3 +1,4 @@
 /src/lib/wasm/*
 /src/lib/tasks-text.js
 /node_modules/
+/dist/

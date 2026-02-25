@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Verify dist output
+        run: |
+          test -f dist/background.js
+          test -f dist/manifest.json
+          test -f dist/content.js
+          test -f dist/embedder-api.js
+          test -f dist/offscreen.html
+          test -f dist/offscreen.js
+          echo "All expected files present in dist/"
+
+      - name: Run EmbeddingGemma integration tests
+        run: npm test

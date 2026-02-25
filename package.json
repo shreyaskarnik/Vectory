@@ -1,11 +1,20 @@
 {
-    "name": "vectory-setup",
-    "version": "1.0.0",
-    "description": "Setup scripts for Vectory",
+    "name": "vectory",
+    "version": "2.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Speculative Embedding API prollyfill — EmbeddingGemma (default) + Universal Sentence Encoder",
     "scripts": {
-        "setup": "node scripts/setup.js"
+        "setup": "node scripts/setup.js",
+        "dev": "node build.mjs --watch",
+        "build": "node build.mjs",
+        "test": "node --test 'test/**/*.test.js'"
     },
     "dependencies": {
+        "@huggingface/transformers": "^4.0.0-next.4",
         "@mediapipe/tasks-text": "^0.10.0"
+    },
+    "devDependencies": {
+        "vite": "^6.0.0"
     }
 }

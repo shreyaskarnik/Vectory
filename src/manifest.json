@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Vectory",
-  "version": "1.0",
-  "description": "Speculative Embedding API Prototyping",
+  "version": "2.0",
+  "description": "Speculative Embedding API — EmbeddingGemma + Universal Sentence Encoder",
   "permissions": [
     "offscreen",
+    "storage",
     "unlimitedStorage"
   ],
   "background": {
@@ -33,9 +34,13 @@
     }
   ],
   "host_permissions": [
-    "https://storage.googleapis.com/*"
+    "https://storage.googleapis.com/*",
+    "https://huggingface.co/*"
   ],
+  "action": {
+    "default_title": "Vectory Playground"
+  },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://storage.googleapis.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://storage.googleapis.com https://huggingface.co https://cdn-lfs.hf.co https://cdn-lfs-us-1.hf.co"
   }
 }
