@@ -35,12 +35,13 @@
   ],
   "host_permissions": [
     "https://storage.googleapis.com/*",
-    "https://huggingface.co/*"
+    "https://huggingface.co/*",
+    "https://*.xethub.hf.co/*"
   ],
   "action": {
     "default_title": "Vectory Playground"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://storage.googleapis.com https://huggingface.co https://cdn-lfs.hf.co https://cdn-lfs-us-1.hf.co"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://storage.googleapis.com https://huggingface.co https://cdn-lfs.hf.co https://cdn-lfs-us-1.hf.co https://*.xethub.hf.co"
   }
 }
