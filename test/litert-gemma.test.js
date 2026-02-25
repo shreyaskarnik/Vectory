@@ -5,6 +5,12 @@
  *   1. The .tflite model is downloadable from HuggingFace
  *   2. The downloaded file is a valid TFLite flatbuffer
  *   3. The file size is reasonable for a 300M parameter model
+ *   4. The model constants in background.js match the test expectations
+ *
+ * NOTE: Full embedding inference tests are not possible in Node.js because
+ * the LiteRT backend runs via MediaPipe WASM in a browser offscreen document.
+ * EmbeddingGemma embedding quality is validated in embedding-gemma.test.js
+ * (same model, Transformers.js runtime).
  *
  * Uses Node.js built-in test runner (node --test).
  * Skips gracefully when network is unavailable.
@@ -12,16 +18,23 @@
 
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ---------------------------------------------------------------------------
-// Config
+// Config — must stay in sync with src/background.js
 // ---------------------------------------------------------------------------
 
 const LITERT_GEMMA_MODEL_URL =
   "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite";
 
-// TFLite flatbuffer magic bytes: "TFL3"
+const LITERT_GEMMA_MODEL_FILE = "embeddinggemma-litert.tflite";
+
+// TFLite flatbuffer magic bytes at offset 4: "TFL3"
 const TFLITE_MAGIC = new Uint8Array([0x54, 0x46, 0x4c, 0x33]);
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Network check
@@ -75,24 +88,46 @@ describe("LiteRT EmbeddingGemma model", { timeout: 120_000 }, () => {
     assert.ok(size > fiftyMB, `Expected > 50 MB, got ${(size / 1024 / 1024).toFixed(1)} MB`);
   });
 
+  it("content-type indicates a binary file", async (t) => {
+    if (!networkAvailable) return t.skip("no network");
+    const ct = headResponse.headers.get("content-type") || "";
+    assert.ok(
+      ct.includes("octet-stream") || ct.includes("flatbuffers") || ct.includes("application/"),
+      `Expected binary content-type, got "${ct}"`
+    );
+  });
+
   it("first bytes match TFLite flatbuffer magic", async (t) => {
     if (!networkAvailable) return t.skip("no network");
 
     // Download just the first 8 bytes via Range header
     const rangeRes = await fetch(LITERT_GEMMA_MODEL_URL, {
-      headers: { Range: "bytes=4-7" },
+      headers: { Range: "bytes=0-7" },
       signal: AbortSignal.timeout(15000),
       redirect: "follow",
     });
 
-    // Some servers may not support Range; fall back to full response
     const buf = new Uint8Array(await rangeRes.arrayBuffer());
-    const magic = rangeRes.status === 206 ? buf.slice(0, 4) : buf.slice(4, 8);
+    // TFLite magic is at bytes 4-7
+    const magic = buf.slice(4, 8);
 
     assert.deepEqual(
       Array.from(magic),
       Array.from(TFLITE_MAGIC),
-      `Expected TFLite magic bytes "TFL3", got [${Array.from(magic).map(b => '0x' + b.toString(16).padStart(2, '0')).join(', ')}]`
+      `Expected TFLite magic bytes "TFL3" at offset 4, got [${Array.from(magic).map(b => "0x" + b.toString(16).padStart(2, "0")).join(", ")}]`
+    );
+  });
+
+  it("background.js model URL matches test URL", async (t) => {
+    const bgPath = resolve(__dirname, "..", "src", "background.js");
+    const bgSource = readFileSync(bgPath, "utf8");
+    assert.ok(
+      bgSource.includes(LITERT_GEMMA_MODEL_URL),
+      "background.js should contain the LiteRT model URL"
+    );
+    assert.ok(
+      bgSource.includes(`'${LITERT_GEMMA_MODEL_FILE}'`) || bgSource.includes(`"${LITERT_GEMMA_MODEL_FILE}"`),
+      "background.js should contain the OPFS file name"
     );
   });
 });
