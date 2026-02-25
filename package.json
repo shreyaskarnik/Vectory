@@ -8,7 +8,7 @@
         "setup": "node scripts/setup.js",
         "dev": "node build.mjs --watch",
         "build": "node build.mjs",
-        "test": "node --test test/"
+        "test": "node --test test/embedding-gemma.test.js test/litert-gemma.test.js"
     },
     "dependencies": {
         "@huggingface/transformers": "^4.0.0-next.4",

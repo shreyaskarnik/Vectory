@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Vectory",
   "version": "2.0",
-  "description": "Speculative Embedding API — EmbeddingGemma + Universal Sentence Encoder (alternate)",
+  "description": "Speculative Embedding API — EmbeddingGemma + USE (alternate) + LiteRT EmbeddingGemma",
   "permissions": [
     "offscreen",
     "storage",

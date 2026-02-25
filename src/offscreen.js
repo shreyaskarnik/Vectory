@@ -4,14 +4,22 @@ console.log('Vectory Offscreen Engine Started');
 
 let textEmbedder = null;
 let modelStatus = 'unavailable'; // unavailable, downloading, downloadable, available
+let activeModelFile = null; // tracks which model file is currently loaded
 
-const MODEL_FILE_NAME = 'model.tflite';
+/** OPFS file names per backend */
+const MODEL_FILES = {
+    use: 'model.tflite',
+    litertgemma: 'embeddinggemma-litert.tflite',
+};
 
-async function checkModelInOPFS() {
+function getModelFileName(backend) {
+    return MODEL_FILES[backend] || MODEL_FILES.use;
+}
+
+async function checkModelInOPFS(fileName) {
     try {
         const root = await navigator.storage.getDirectory();
-        // Try to get the file handle
-        const fileHandle = await root.getFileHandle(MODEL_FILE_NAME);
+        const fileHandle = await root.getFileHandle(fileName);
         const file = await fileHandle.getFile();
         if (file.size > 0) {
             return { status: 'available', file };
@@ -22,14 +30,12 @@ async function checkModelInOPFS() {
     return { status: 'downloadable' };
 }
 
-async function initializeEmbedder(file) {
+async function initializeEmbedder(file, fileName) {
     try {
         const vision = await FilesetResolver.forTextTasks(
-            // Use local WASM files
             "./lib/wasm"
         );
 
-        // precise url creation from blob
         const modelUrl = URL.createObjectURL(file);
 
         textEmbedder = await TextEmbedder.createFromOptions(vision, {
@@ -39,24 +45,26 @@ async function initializeEmbedder(file) {
             quantize: false
         });
 
+        activeModelFile = fileName;
         modelStatus = 'available';
-        console.log('TextEmbedder initialized successfully');
+        console.log(`TextEmbedder initialized successfully (${fileName})`);
     } catch (err) {
-        console.error('Failed to initialize TextEmbedder:', err);
+        console.error(`Failed to initialize TextEmbedder (${fileName}):`, err);
         modelStatus = 'unavailable';
     }
 }
 
-// Initial Check
-checkModelInOPFS().then(async (result) => {
+// Initial Check — try USE model by default
+checkModelInOPFS(MODEL_FILES.use).then(async (result) => {
     modelStatus = result.status;
     if (modelStatus === 'available' && result.file) {
-        await initializeEmbedder(result.file);
+        await initializeEmbedder(result.file, MODEL_FILES.use);
     }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // console.log('Offscreen received message:', message);
+    const backend = message._backend || 'use';
+    const modelFile = getModelFileName(backend);
 
     if (message.type === 'VECTORY_AVAILABILITY') {
         const modality = message.options?.modality || 'text';
@@ -65,19 +73,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
         }
 
-        // Check OPFS again if not available, just in case
-        if (modelStatus !== 'available') {
-            checkModelInOPFS().then(res => {
-                modelStatus = res.status;
-                // If we found it now (e.g. downloaded by SW), initialize? 
-                // Actually SW downloads it. We should have a way to know it's ready.
-                // For availability, just return status.
-                sendResponse(modelStatus);
-            });
-            return true;
-        } else {
+        // If we have the right model loaded, report available
+        if (modelStatus === 'available' && activeModelFile === modelFile) {
             sendResponse('available');
+            return;
         }
+
+        // Check OPFS for the requested model
+        checkModelInOPFS(modelFile).then(res => {
+            modelStatus = res.status;
+            sendResponse(modelStatus);
+        });
+        return true;
     }
     else if (message.type === 'VECTORY_CREATE') {
         const modality = message.options?.modality || 'text';
@@ -86,20 +93,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
         }
 
-        if (modelStatus === 'available' && textEmbedder) {
+        // If the right model is already loaded, we're done
+        if (modelStatus === 'available' && textEmbedder && activeModelFile === modelFile) {
             sendResponse({ success: true });
-        } else {
-            // Try check again?
-            checkModelInOPFS().then(async res => {
-                if (res.status === 'available' && res.file) {
-                    await initializeEmbedder(res.file);
-                    sendResponse({ success: true });
-                } else {
-                    sendResponse({ success: false, error: 'Model not available' });
-                }
-            });
-            return true;
+            return;
         }
+
+        // Load the requested model from OPFS
+        checkModelInOPFS(modelFile).then(async res => {
+            if (res.status === 'available' && res.file) {
+                await initializeEmbedder(res.file, modelFile);
+                sendResponse({ success: true });
+            } else {
+                sendResponse({ success: false, error: 'Model not available' });
+            }
+        });
+        return true;
     }
     else if (message.type === 'VECTORY_EMBED') {
         if (!textEmbedder) {

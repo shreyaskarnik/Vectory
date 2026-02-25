@@ -1,7 +1,8 @@
 // Background Service Worker
-// Supports two backends:
+// Supports three backends:
 //   - "embeddinggemma" (default): Transformers.js + EmbeddingGemma-300M in the service worker
 //   - "use": MediaPipe Universal Sentence Encoder via offscreen document
+//   - "litertgemma": LiteRT EmbeddingGemma-300M via MediaPipe in offscreen document
 
 import { AutoTokenizer, AutoModel, env } from "@huggingface/transformers";
 
@@ -21,10 +22,15 @@ const EMBED_TASK_PREFIX = "task: classification | query: ";
 const USE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/text_embedder/universal_sentence_encoder/float32/1/universal_sentence_encoder.tflite';
 const USE_MODEL_FILE = 'model.tflite';
 
+/** LiteRT EmbeddingGemma model download URL */
+const LITERT_GEMMA_MODEL_URL = 'https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite';
+const LITERT_GEMMA_MODEL_FILE = 'embeddinggemma-litert.tflite';
+
 /** Backend identifiers */
 const BACKEND = {
     EMBEDDING_GEMMA: 'embeddinggemma',
     USE: 'use',
+    LITERT_GEMMA: 'litertgemma',
 };
 
 // ---------------------------------------------------------------------------
@@ -74,7 +80,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // ---------------------------------------------------------------------------
-// Offscreen document management (USE backend only)
+// Offscreen document management (USE and LiteRT backends)
 // ---------------------------------------------------------------------------
 
 async function setupOffscreenDocument(path) {
@@ -92,7 +98,7 @@ async function setupOffscreenDocument(path) {
         creating = chrome.offscreen.createDocument({
             url: path,
             reasons: ['WORKERS'],
-            justification: 'MediaPipe WASM inference engine (USE)',
+            justification: 'MediaPipe WASM inference engine',
         });
         await creating;
         creating = null;
@@ -241,6 +247,54 @@ async function downloadUSEModel(sender) {
 }
 
 // ---------------------------------------------------------------------------
+// LiteRT EmbeddingGemma backend: model download (to OPFS)
+// ---------------------------------------------------------------------------
+
+async function downloadLiteRTGemmaModel(sender) {
+    console.log('[vectory] Starting LiteRT EmbeddingGemma model download...');
+    broadcastProgress(sender, 0, 'starting');
+
+    try {
+        const response = await fetch(LITERT_GEMMA_MODEL_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (!response.body) throw new Error('Response body is empty');
+
+        const contentLength = response.headers.get('Content-Length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        let loaded = 0;
+
+        const root = await navigator.storage.getDirectory();
+        const fileHandle = await root.getFileHandle(LITERT_GEMMA_MODEL_FILE, { create: true });
+        const writable = await fileHandle.createWritable();
+        const reader = response.body.getReader();
+
+        await new Promise(async (resolve, reject) => {
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    await writable.write(value);
+                    loaded += value.length;
+                    if (total > 0) broadcastProgress(sender, loaded / total, 'downloading');
+                }
+                await writable.close();
+                broadcastProgress(sender, 1, 'completed');
+                resolve();
+            } catch (e) {
+                try { await writable.close(); } catch (_) {}
+                reject(e);
+            }
+        });
+
+        console.log('[vectory] LiteRT EmbeddingGemma model download complete.');
+    } catch (e) {
+        console.error('[vectory] LiteRT download failed:', e);
+        broadcastProgress(sender, 0, 'failed');
+        throw e;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Message handler
 // ---------------------------------------------------------------------------
 
@@ -251,15 +305,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // ----------- DOWNLOAD -----------
     if (message.type === 'VECTORY_DOWNLOAD') {
+        let downloadPromise;
         if (backend === BACKEND.EMBEDDING_GEMMA) {
-            loadGemmaModel(sender)
-                .then(() => sendResponse({ success: true }))
-                .catch(err => sendResponse({ success: false, error: err.message }));
+            downloadPromise = loadGemmaModel(sender);
+        } else if (backend === BACKEND.LITERT_GEMMA) {
+            downloadPromise = downloadLiteRTGemmaModel(sender);
         } else {
-            downloadUSEModel(sender)
-                .then(() => sendResponse({ success: true }))
-                .catch(err => sendResponse({ success: false, error: err.message }));
+            downloadPromise = downloadUSEModel(sender);
         }
+        downloadPromise
+            .then(() => sendResponse({ success: true }))
+            .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
     }
 
@@ -317,9 +373,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
-    // ----------- USE path (forward to offscreen document) -----------
+    // ----------- Offscreen path (USE and LiteRT backends) -----------
+    const offscreenMessage = { ...message, _backend: backend };
     setupOffscreenDocument(OFFSCREEN_DOCUMENT_PATH).then(() => {
-        chrome.runtime.sendMessage(message, (response) => {
+        chrome.runtime.sendMessage(offscreenMessage, (response) => {
             sendResponse(response);
         });
     });
@@ -341,7 +398,7 @@ chrome.action.onClicked.addListener(() => {
 chrome.runtime.onStartup.addListener(() => {
     getBackend().then(b => {
         activeBackend = b;
-        if (b === BACKEND.USE) {
+        if (b === BACKEND.USE || b === BACKEND.LITERT_GEMMA) {
             setupOffscreenDocument(OFFSCREEN_DOCUMENT_PATH);
         }
     });

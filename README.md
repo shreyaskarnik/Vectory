@@ -9,8 +9,9 @@ Instead of waiting for a native `window.Embedder` implementation, Vectory provid
 * **Native-Style API:** Follows built-in AI's `availability()` and `create()` async patterns.
 * **EmbeddingGemma (default):** Google's state-of-the-art 308M parameter embedding model via [Transformers.js](https://huggingface.co/docs/transformers.js) + WebGPU/WASM.
 * **Universal Sentence Encoder (alternate):** MediaPipe-based fallback via offscreen document.
+* **LiteRT EmbeddingGemma:** Quantized EmbeddingGemma-300M via MediaPipe + LiteRT in offscreen document.
 * **Private:** Your data never leaves your browser. All embeddings are generated locally.
-* **Efficient Storage:** Models are cached automatically (HuggingFace cache for EmbeddingGemma, OPFS for USE).
+* **Efficient Storage:** Models are cached automatically (HuggingFace cache for EmbeddingGemma, OPFS for USE/LiteRT).
 
 ## Known Limitations
 
@@ -50,6 +51,9 @@ Vectory defaults to **EmbeddingGemma**. To switch backends, open the extension's
 // Switch to Universal Sentence Encoder
 chrome.storage.local.set({ model_backend: 'use' });
 
+// Switch to LiteRT EmbeddingGemma
+chrome.storage.local.set({ model_backend: 'litertgemma' });
+
 // Switch back to EmbeddingGemma (default)
 chrome.storage.local.set({ model_backend: 'embeddinggemma' });
 ```
@@ -58,6 +62,7 @@ chrome.storage.local.set({ model_backend: 'embeddinggemma' });
 |---|---|---|---|---|
 | `embeddinggemma` | EmbeddingGemma-300M (q4) | ~75MB | 768 | Transformers.js (WebGPU/WASM) |
 | `use` | Universal Sentence Encoder | ~6MB | 512 | MediaPipe (WASM) |
+| `litertgemma` | EmbeddingGemma-300M (mixed-precision) | ~150MB | 768 | MediaPipe/LiteRT (WASM) |
 
 ## Usage for Web Developers
 
@@ -103,8 +108,12 @@ Background Service Worker
     |   WebGPU when available, WASM fallback.
     |
     +-- USE backend (alternate)
+    |   Routes to Offscreen Document running MediaPipe WASM.
+    |   Model: Universal Sentence Encoder (.tflite in OPFS)
+    |
+    +-- LiteRT EmbeddingGemma backend
         Routes to Offscreen Document running MediaPipe WASM.
-        Model: Universal Sentence Encoder (.tflite in OPFS)
+        Model: litert-community/embeddinggemma-300m (.tflite in OPFS)
 ```
 
 ## Testing
@@ -119,6 +128,7 @@ Runs Node.js integration tests that load EmbeddingGemma via Transformers.js and 
 
 * [x] Initial MVP with Universal Sentence Encoder (~6MB).
 * [x] Support for **EmbeddingGemma** via Transformers.js.
+* [x] LiteRT EmbeddingGemma backend via MediaPipe.
 * [ ] Multimodal support (Image Embeddings)?
 * [ ] Integrated similarity utilities (`Embedder.cosineSimilarity`)?
 
