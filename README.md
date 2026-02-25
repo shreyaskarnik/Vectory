@@ -8,7 +8,7 @@ Instead of waiting for a native `window.Embedder` implementation, Vectory provid
 
 * **Native-Style API:** Follows built-in AI's `availability()` and `create()` async patterns.
 * **EmbeddingGemma (default):** Google's state-of-the-art 308M parameter embedding model via [Transformers.js](https://huggingface.co/docs/transformers.js) + WebGPU/WASM.
-* **Universal Sentence Encoder (legacy):** MediaPipe-based fallback via offscreen document.
+* **Universal Sentence Encoder (alternate):** MediaPipe-based fallback via offscreen document.
 * **Private:** Your data never leaves your browser. All embeddings are generated locally.
 * **Efficient Storage:** Models are cached automatically (HuggingFace cache for EmbeddingGemma, OPFS for USE).
 
@@ -29,7 +29,7 @@ This bundles the service worker with Transformers.js and copies extension files 
 
 ### 2. (Optional) MediaPipe setup for USE backend
 
-If you want the legacy Universal Sentence Encoder backend:
+If you want the alternate Universal Sentence Encoder backend:
 
 ```bash
 npm run setup
@@ -102,7 +102,7 @@ Background Service Worker
     |   Model: onnx-community/embeddinggemma-300m-ONNX (q4)
     |   WebGPU when available, WASM fallback.
     |
-    +-- USE backend (legacy)
+    +-- USE backend (alternate)
         Routes to Offscreen Document running MediaPipe WASM.
         Model: Universal Sentence Encoder (.tflite in OPFS)
 ```

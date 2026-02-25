@@ -3,12 +3,12 @@
     "version": "2.0.0",
     "private": true,
     "type": "module",
-    "description": "Speculative Embedding API prollyfill — EmbeddingGemma (default) + Universal Sentence Encoder",
+    "description": "Speculative Embedding API prollyfill — EmbeddingGemma (default) + Universal Sentence Encoder (alternate)",
     "scripts": {
         "setup": "node scripts/setup.js",
         "dev": "node build.mjs --watch",
         "build": "node build.mjs",
-        "test": "node --test 'test/**/*.test.js'"
+        "test": "node --test test/"
     },
     "dependencies": {
         "@huggingface/transformers": "^4.0.0-next.4",
